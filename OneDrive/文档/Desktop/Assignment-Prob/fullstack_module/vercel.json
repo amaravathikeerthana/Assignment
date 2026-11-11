@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "name": "cropsense-farmer-dashboard",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/fullstack_module/frontend/$1"
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CropSense - Farmer Advisory & Database Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <span class="brand-icon">🌱</span>
+      <div>
+        <h1>CropSense</h1>
+        <p class="subtitle">AI & IoT Precision Farming Advisory System</p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <div id="dbStatusBadge" class="status-badge running">
+        <span class="dot"></span>
+        <span id="dbStatusText">Database: Online</span>
+      </div>
+      <div id="daemonBadge" class="status-badge stopped">
+        <span class="dot"></span>
+        <span id="daemonText">OS Sensor Daemon: Idle</span>
+      </div>
+      <button id="toggleDaemonBtn" class="btn btn-outline">Start Sensor Daemon</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Quick KPI Row -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-title">Monitored Fields</span>
+        <span class="kpi-val" id="kpiFieldCount">4 Plots</span>
+        <span class="kpi-sub">Cotton, Wheat, Chilli, Rice</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Avg Soil Moisture</span>
+        <span class="kpi-val" id="kpiMoisture">42.5%</span>
+        <span class="kpi-sub">Target: 40% - 65%</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Latest ML Yield</span>
+        <span class="kpi-val" id="kpiAvgYield">-- Q/acre</span>
+        <span class="kpi-sub">ML Forecasted baseline</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Database Storage</span>
+        <span class="kpi-val text-primary" id="kpiDbCount">0 Stored</span>
+        <span class="kpi-sub" id="kpiDbSub">SQLite: cropsense_master.db</span>
+      </div>
+    </section>
+
+    <!-- Interactive Grid: Advisory Input & Prediction Results -->
+    <div class="main-grid">
+      <!-- Input Card -->
+      <section class="card input-card">
+        <div class="card-header">
+          <h2>🌾 Crop Advisory & Yield Calculator</h2>
+          <p>Input real-time environmental metrics or choose presets to run inference and persist to database.</p>
+        </div>
+
+        <form id="advisorForm" onsubmit="event.preventDefault(); return false;">
+          <div class="form-group">
+            <label for="fieldSelect">Target Field</label>
+            <select id="fieldSelect">
+              <option value="1">Field 1: North Plot A (Cotton - Ramesh Patel)</option>
+              <option value="2">Field 2: South Plot B (Wheat - Ramesh Patel)</option>
+              <option value="3">Field 3: Riverfront Field (Chilli - Suresh Kumar)</option>
+              <option value="4">Field 4: Canal Field (Paddy - Lakshmi Devi)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputTemp">Temperature (°C): <span id="valTemp" class="val-preview">38.0</span></label>
+              <input type="range" id="inputTemp" min="15" max="45" step="0.5" value="38.0">
+            </div>
+            <div class="form-group">
+              <label for="inputHumidity">Relative Humidity (%): <span id="valHumidity" class="val-preview">30</span></label>
+              <input type="range" id="inputHumidity" min="20" max="100" step="1" value="30">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputSoil">Soil Moisture (%): <span id="valSoil" class="val-preview">15</span></label>
+              <input type="range" id="inputSoil" min="5" max="95" step="1" value="15">
+            </div>
+            <div class="form-group">
+              <label for="inputRain">Rainfall (mm): <span id="valRain" class="val-preview">13</span></label>
+              <input type="range" id="inputRain" min="0" max="250" step="1" value="13">
+            </div>
+          </div>
+
+          <div class="presets-row">
+            <span>Quick Presets:</span>
+            <button type="button" class="btn-chip" onclick="setPreset(28, 65, 50, 20)">Optimal Growth</button>
+            <button type="button" class="btn-chip" onclick="setPreset(38, 30, 15, 13)">Severe Drought</button>
+            <button type="button" class="btn-chip" onclick="setPreset(31, 92, 70, 40)">Pest Risk (Warm/Humid)</button>
+          </div>
+
+          <button type="button" class="btn btn-primary w-full" id="submitBtn">Run ML Prediction & Store in Database</button>
+        </form>
+      </section>
+
+      <!-- Prediction & Advisory Output Card -->
+      <section class="card output-card">
+        <div class="card-header">
+          <h2>📊 ML Prediction & Agronomic Advisory</h2>
+          <p>Instant assessment derived from Random Forest regressors & classification rules.</p>
+        </div>
+
+        <div id="resultsPlaceholder" class="placeholder-state">
+          <p>Click <strong>"Run ML Prediction & Store in Database"</strong> to calculate yield, detect drought/pest risks, and record into the database.</p>
+        </div>
+
+        <div id="resultsContent" class="results-content hidden">
+          <div class="metrics-summary">
+            <div class="metric-pill">
+              <span class="m-label">Predicted Crop Yield</span>
+              <span class="m-value text-primary" id="resYield">-- Q/Acre</span>
+            </div>
+            <div class="metric-pill">
+              <span class="m-label">Drought Risk Status</span>
+              <span class="m-badge" id="resDrought">--</span>
+            </div>
+            <div class="metric-pill">
+              <span class="m-label">Pest & Disease Risk</span>
+              <span class="m-badge" id="resPest">--</span>
+            </div>
+          </div>
+
+          <div class="advisory-box">
+            <h3>Recommendations for Farmer:</h3>
+            <ul id="resAdvisoryList" class="advisory-list"></ul>
+          </div>
+
+          <div class="save-status-pill success" id="dbSaveConfirmation">
+            💾 Successfully saved telemetry reading & advisory to SQLite database.
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Active Monitored Plots Table -->
+    <section class="card">
+      <div class="card-header flex-between">
+        <div>
+          <h2>🌾 Active Monitored Fields (Latest Reading per Plot)</h2>
+          <p>Real-time joined view from <code>farmers</code>, <code>fields</code>, <code>sensor_readings</code>, and <code>advisories</code>.</p>
+        </div>
+        <div class="daemon-stats-summary" id="daemonStatsText">
+          Buffer Queue: 0/50 | Produced: 0 | Consumed: 0
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Field ID</th>
+              <th>Farmer</th>
+              <th>Crop Type</th>
+              <th>Soil Type</th>
+              <th>Temp (°C)</th>
+              <th>Humidity</th>
+              <th>Soil Moisture</th>
+              <th>Rainfall</th>
+              <th>Latest Yield / Risk</th>
+            </tr>
+          </thead>
+          <tbody id="overviewTableBody">
+            <tr><td colspan="9" class="text-center">Loading field records...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Database History & Stored Records Table -->
+    <section class="card">
+      <div class="card-header flex-between">
+        <div>
+          <h2>💾 Stored Telemetry & Advisory Records (Database Log)</h2>
+          <p>Continuous audit log of all readings and predictions saved into SQLite storage.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button id="refreshHistoryBtn" class="btn btn-sm btn-outline" onclick="handleRefreshRecords()">🔄 Refresh Records</button>
+          <button id="clearHistoryBtn" class="btn btn-sm btn-danger-outline" onclick="handleClearAllRecords()">🗑️ Clear All</button>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Timestamp</th>
+              <th>Field & Crop</th>
+              <th>Farmer</th>
+              <th>Temp (°C)</th>
+              <th>Humidity</th>
+              <th>Soil Moisture</th>
+              <th>Rainfall</th>
+              <th>Yield (Q/Acre)</th>
+              <th>Drought Risk</th>
+              <th>Pest Risk</th>
+              <th>Storage Source</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr><td colspan="12" class="text-center">Loading stored database logs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>CropSense Agricultural Advisory System • DBMS, Data Engineering, ML, Full Stack & OS Architecture</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

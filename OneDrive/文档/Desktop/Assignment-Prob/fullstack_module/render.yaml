@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: cropsense-backend
+    env: python
+    buildCommand: "pip install -r fullstack_module/backend/requirements.txt && python ml_module/train_model.py"
+    startCommand: "gunicorn --chdir fullstack_module/backend app:app --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
